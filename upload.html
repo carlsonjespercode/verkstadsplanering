@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ladda upp planering</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #1f2328; --muted: #656d76;
+    --accent: #1f6feb; --ok: #1a7f37; --err: #cf222e; --border: #d0d7de;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 40px auto; padding: 0 16px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 24px; }
+  #drop { background: var(--card); border: 2px dashed var(--border); border-radius: 12px;
+    padding: 56px 20px; text-align: center; cursor: pointer; transition: .15s; }
+  #drop.over { border-color: var(--accent); background: #eef4ff; }
+  #drop.busy { opacity: .6; pointer-events: none; }
+  #drop strong { display: block; font-size: 18px; margin-bottom: 6px; }
+  #drop span { color: var(--muted); }
+  #codeRow { margin-top: 16px; display: none; }
+  #codeRow label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+  #code { width: 100%; padding: 8px 10px; font-size: 15px; border: 1px solid var(--border); border-radius: 6px; }
+  #msg { margin-top: 16px; min-height: 24px; font-weight: 500; }
+  #msg.ok { color: var(--ok); } #msg.err { color: var(--err); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Verkstadsplanering</h1>
+  <p class="sub">Släpp den nya PDF:en här så ersätter den planeringen. Visningssidan hämtar den automatiskt inom ca 10 minuter.
+    <a href="./">Öppna visningssidan</a></p>
+
+  <div id="drop">
+    <strong>Dra och släpp PDF här</strong>
+    <span>eller klicka för att välja fil</span>
+    <input id="file" type="file" accept="application/pdf,.pdf" hidden>
+  </div>
+
+  <div id="codeRow">
+    <label for="code">Uppladdningskod</label>
+    <input id="code" type="password" autocomplete="off">
+  </div>
+
+  <div id="msg"></div>
+</main>
+
+<script>
+  // ===== Inställningar =====
+  const WORKER_URL = 'https://verkstadsplanering.DITT-KONTO.workers.dev'; // Byt till din Worker-adress
+  const USE_CODE = false; // true om du satt UPLOAD_CODE i Workern
+
+  const $ = id => document.getElementById(id);
+  const drop = $('drop'), fileInput = $('file'), msg = $('msg'), codeInput = $('code');
+
+  if (USE_CODE) {
+    $('codeRow').style.display = 'block';
+    try { codeInput.value = localStorage.getItem('vp_code') || ''; } catch {}
+  }
+
+  function show(text, cls) { msg.textContent = text; msg.className = cls || ''; }
+
+  drop.onclick = () => fileInput.click();
+  fileInput.onchange = () => fileInput.files[0] && upload(fileInput.files[0]);
+  ['dragenter', 'dragover'].forEach(e => drop.addEventListener(e, ev => {
+    ev.preventDefault(); drop.classList.add('over');
+  }));
+  ['dragleave', 'drop'].forEach(e => drop.addEventListener(e, ev => {
+    ev.preventDefault(); drop.classList.remove('over');
+  }));
+  drop.addEventListener('drop', ev => {
+    const f = ev.dataTransfer.files[0];
+    if (f) upload(f);
+  });
+
+  async function upload(file) {
+    if (!file.name.toLowerCase().endsWith('.pdf')) return show('Filen måste vara en PDF.', 'err');
+    if (USE_CODE && !codeInput.value.trim()) { codeInput.focus(); return show('Fyll i uppladdningskoden.', 'err'); }
+
+    const data = new FormData();
+    data.append('file', file);
+    if (USE_CODE) data.append('code', codeInput.value.trim());
+
+    drop.classList.add('busy');
+    show('Laddar upp ' + file.name + '…');
+    try {
+      const res = await fetch(WORKER_URL, { method: 'POST', body: data });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.message || 'HTTP ' + res.status);
+      if (USE_CODE) { try { localStorage.setItem('vp_code', codeInput.value.trim()); } catch {} }
+      show('Klart! Planeringen syns på visningssidan inom ca 10 minuter.', 'ok');
+    } catch (err) {
+      console.error(err);
+      show('Uppladdningen misslyckades: ' + err.message, 'err');
+    } finally {
+      drop.classList.remove('busy');
+      fileInput.value = '';
+    }
+  }
+</script>
+</body>
+</html>
