@@ -33,7 +33,7 @@
 <script>
   // ===== Inställningar =====
   const PDF_FILE = 'planering.pdf';          // Filen som visas (samma namn som upload.html sparar)
-  const CHECK_INTERVAL_MS = 0,5 * 60 * 1000;  // Kolla efter ny fil var 10:e minut
+  const CHECK_INTERVAL_MS = 10 * 1000;  // Kolla efter ny fil var 10:e minut
 
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
