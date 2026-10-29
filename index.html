@@ -5,115 +5,83 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Verkstadsplanering</title>
 <style>
-  :root {
-    --bg: #1b1d21;
-    --page: #ffffff;
-    --text: #e8e8e8;
-    --muted: #9aa0a6;
-    --badge-bg: rgba(0,0,0,.55);
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  #viewer { width: 100%; min-height: 100%; display: flex; flex-direction: column;
-    align-items: center; gap: 16px; padding: 8px; }
-  canvas { background: var(--page); max-width: 100%; display: block;
-    box-shadow: 0 2px 12px rgba(0,0,0,.4); }
-  #status { position: fixed; right: 12px; bottom: 10px; padding: 6px 10px;
-    border-radius: 6px; background: var(--badge-bg); color: var(--muted);
-    font-size: 13px; pointer-events: none; }
-  #message { margin: auto; text-align: center; color: var(--muted); font-size: 18px; padding: 40px; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #1b1d21; color: #9aa0a6;
+    font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
+  body.scroll { overflow: auto; }
+  #plan { display: none; margin: 0 auto; background: #fff; }
+  #message { padding: 60px 20px; text-align: center; font-size: 22px; }
+  #status { position: fixed; right: 12px; bottom: 10px; padding: 6px 10px; border-radius: 6px;
+    background: #000; background: rgba(0,0,0,.55); font-size: 14px; }
 </style>
 </head>
 <body>
-<div id="viewer"><div id="message">Laddar planering…</div></div>
+<div id="message">Laddar planering…</div>
+<img id="plan" alt="Verkstadsplanering">
 <div id="status"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
+  // Skriven i gammal, enkel JavaScript så att den fungerar även i TV-webbläsare.
   // ===== Inställningar =====
-  const PDF_FILE = 'planering.pdf';          // Filen som visas (samma namn som upload.html sparar)
-  const CHECK_INTERVAL_MS = 10 * 1000;  // Kolla efter ny fil var 10:e minut
+  var IMG_FILE = 'planering.png';
+  var CHECK_INTERVAL_MS = 30 * 1000;   // Testfas: 30 sek. Sätt till 10 * 60 * 1000 för 10 min.
 
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  var plan = document.getElementById('plan');
+  var message = document.getElementById('message');
+  var statusEl = document.getElementById('status');
+  var currentVersion = null;
 
-  const viewer = document.getElementById('viewer');
-  const statusEl = document.getElementById('status');
-  let currentVersion = null;
-  let currentPdf = null;
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function now() { var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
 
-  function fmtTime(d) {
-    return d.toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' });
-  }
-
-  // Hämtar en "version" av filen (ETag eller Last-Modified) utan att ladda hela PDF:en
-  async function getVersion() {
-    const res = await fetch(PDF_FILE + '?check=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return res.headers.get('ETag') || res.headers.get('Last-Modified') || String(res.headers.get('Content-Length'));
-  }
-
-  async function loadPdf(version) {
-    const url = PDF_FILE + '?v=' + encodeURIComponent(version || Date.now());
-    const pdf = await pdfjsLib.getDocument({ url }).promise;
-    if (currentPdf) currentPdf.destroy();
-    currentPdf = pdf;
-    await render();
-  }
-
-  // Renderar alla sidor anpassade till skärmens bredd (och höjd om det är en sida)
-  async function render() {
-    if (!currentPdf) return;
-    const frag = document.createDocumentFragment();
-    const dpr = window.devicePixelRatio || 1;
-    const availW = viewer.clientWidth - 16;
-    const availH = window.innerHeight - 16;
-
-    for (let i = 1; i <= currentPdf.numPages; i++) {
-      const page = await currentPdf.getPage(i);
-      const base = page.getViewport({ scale: 1 });
-      let scale = availW / base.width;
-      // En-sidig planering: få plats med hela sidan på skärmen
-      if (currentPdf.numPages === 1) scale = Math.min(scale, availH / base.height);
-      const vp = page.getViewport({ scale: scale * dpr });
-
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.floor(vp.width);
-      canvas.height = Math.floor(vp.height);
-      canvas.style.width = Math.floor(vp.width / dpr) + 'px';
-      canvas.style.height = Math.floor(vp.height / dpr) + 'px';
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-      frag.appendChild(canvas);
+  function fit() {
+    if (!plan.naturalWidth) return;
+    var w = window.innerWidth, h = window.innerHeight;
+    var ratio = plan.naturalWidth / plan.naturalHeight;
+    if (w / h > ratio && plan.naturalHeight / plan.naturalWidth < 2) {
+      // Anpassa till höjden (en sida får plats på skärmen)
+      plan.style.height = h + 'px'; plan.style.width = Math.round(h * ratio) + 'px';
+      document.body.className = '';
+    } else {
+      plan.style.width = w + 'px'; plan.style.height = Math.round(w / ratio) + 'px';
+      document.body.className = (w / ratio > h) ? 'scroll' : '';
     }
-    viewer.replaceChildren(frag);
   }
 
-  async function check() {
-    try {
-      const version = await getVersion();
-      if (version !== currentVersion) {
-        await loadPdf(version);
-        currentVersion = version;
-        statusEl.textContent = 'Uppdaterad ' + fmtTime(new Date());
+  function showImage(version) {
+    var img = new Image();
+    img.onload = function () {
+      plan.src = img.src;
+      plan.style.display = 'block';
+      message.style.display = 'none';
+      currentVersion = version;
+      setTimeout(fit, 0);
+      statusEl.innerHTML = 'Uppdaterad ' + now();
+    };
+    img.onerror = function () { statusEl.innerHTML = 'Kunde inte ladda bilden ' + now(); };
+    img.src = IMG_FILE + '?v=' + encodeURIComponent(version);
+  }
+
+  function check() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('HEAD', IMG_FILE + '?check=' + new Date().getTime(), true);
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) return;
+      if (xhr.status === 200) {
+        var version = xhr.getResponseHeader('ETag') || xhr.getResponseHeader('Last-Modified')
+          || xhr.getResponseHeader('Content-Length') || String(new Date().getTime());
+        if (version !== currentVersion) showImage(version);
+        else statusEl.innerHTML = 'Kontrollerad ' + now();
+      } else if (!currentVersion) {
+        message.innerHTML = 'Ingen planering hittades ännu.<br>Ladda upp en PDF via upload.html.';
+        statusEl.innerHTML = 'Kontrollerad ' + now();
       } else {
-        statusEl.textContent = 'Kontrollerad ' + fmtTime(new Date());
+        statusEl.innerHTML = 'Kunde inte kontrollera ' + now();
       }
-    } catch (err) {
-      console.error(err);
-      if (!currentPdf) {
-        viewer.innerHTML = '<div id="message">Ingen planering hittades ännu.<br>Ladda upp en PDF via upload.html.</div>';
-      }
-      statusEl.textContent = 'Kunde inte kontrollera – försöker igen om 10 min';
-    }
+    };
+    xhr.send();
   }
 
-  let resizeTimer;
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(render, 300);
-  });
-
+  window.onresize = fit;
   check();
   setInterval(check, CHECK_INTERVAL_MS);
 </script>
