@@ -2,13 +2,14 @@
 <html lang="sv">
 <head>
 <meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Verkstadsplanering</title>
 <style>
   html, body { margin: 0; padding: 0; height: 100%; background: #1b1d21; color: #9aa0a6;
     font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
   body.scroll { overflow: auto; }
-  #plan { display: none; margin: 0 auto; background: #fff; }
+  #plan { display: none; margin: 0; background: #fff; }
   #message { padding: 60px 20px; text-align: center; font-size: 22px; }
   #status { position: fixed; right: 12px; bottom: 10px; padding: 6px 10px; border-radius: 6px;
     background: #000; background: rgba(0,0,0,.55); font-size: 14px; }
@@ -24,6 +25,7 @@
   // ===== Inställningar =====
   var IMG_FILE = 'planering.png';
   var CHECK_INTERVAL_MS = 30 * 1000;   // Testfas: 30 sek. Sätt till 10 * 60 * 1000 för 10 min.
+  var EDGE = 0.04;                      // Tom ram runt planeringen (0.04 = 4 % på varje sida). Öka om TV:n fortfarande skär av.
 
   var plan = document.getElementById('plan');
   var message = document.getElementById('message');
@@ -35,16 +37,25 @@
 
   function fit() {
     if (!plan.naturalWidth) return;
-    var w = window.innerWidth, h = window.innerHeight;
+    var W = window.innerWidth, H = window.innerHeight;
+    var mx = Math.round(W * EDGE), my = Math.round(H * EDGE);
+    var w = W - 2 * mx, h = H - 2 * my;
     var ratio = plan.naturalWidth / plan.naturalHeight;
+    var iw, ih;
     if (w / h > ratio && plan.naturalHeight / plan.naturalWidth < 2) {
-      // Anpassa till höjden (en sida får plats på skärmen)
-      plan.style.height = h + 'px'; plan.style.width = Math.round(h * ratio) + 'px';
+      // Anpassa till höjden (hela planeringen får plats på skärmen)
+      ih = h; iw = Math.round(h * ratio);
       document.body.className = '';
     } else {
-      plan.style.width = w + 'px'; plan.style.height = Math.round(w / ratio) + 'px';
-      document.body.className = (w / ratio > h) ? 'scroll' : '';
+      iw = w; ih = Math.round(w / ratio);
+      document.body.className = (ih > h) ? 'scroll' : '';
     }
+    plan.style.width = iw + 'px';
+    plan.style.height = ih + 'px';
+    // Centrera med ram runt om
+    plan.style.marginLeft = Math.round((W - iw) / 2) + 'px';
+    plan.style.marginTop = (ih < h ? Math.round((H - ih) / 2) : my) + 'px';
+    plan.style.marginBottom = my + 'px';
   }
 
   function showImage(version) {
